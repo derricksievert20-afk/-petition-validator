@@ -3,4 +3,3 @@ pandas
 pillow
 pymupdf
 openpyxl
-rapidfuzz

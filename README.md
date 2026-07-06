@@ -1,14 +1,12 @@
-# Petition Intake Review V7
+# Petition Intake Review V8
 
-This version is intentionally human-in-the-loop. It does not pretend that generic OCR can reliably read handwritten petitions.
+This version is intentionally human-in-the-loop. It does not rely on unreliable handwriting OCR for legal verification.
 
-It helps staff reduce manual line-by-line review by:
-- showing petition pages and row/field crops,
-- letting the reviewer mark required fields as filled or missing,
-- letting the reviewer type/correct printed name and VUID,
-- flagging possible duplicate printed names and duplicate VUIDs after review,
-- exporting a clean CSV/Excel report.
+Workflow:
+1. Upload petition PDFs/images.
+2. Review each row crop.
+3. Uncheck fields that are visibly blank.
+4. Type printed name and VUID when readable.
+5. Generate a clean report of missing fields and possible duplicate names/VUIDs.
 
-Deploy on Streamlit Cloud with:
-- Branch: main
-- Main file: app.py
+Deploy on Streamlit with main file path: `app.py`.
