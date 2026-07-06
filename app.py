@@ -15,7 +15,7 @@ try:
 except Exception:
     convert_from_bytes = None
 
-st.set_page_config(page_title="Petition Validator V3", layout="wide")
+st.set_page_config(page_title="Petition Intake Checker V4", layout="wide")
 
 @dataclass
 class CellResult:
@@ -194,7 +194,9 @@ def analyze_page(img: Image.Image, filename: str, page_num: int, required_fields
             record[f"{field} confidence"] = round(res.confidence, 1)
             record[f"{field} ink"] = round(res.ink_ratio, 4)
 
-            is_blank = res.ink_ratio < blank_threshold and len(text) < 2
+            is_blank = res.ink_ratio < blank_threshold
+            record[f"{field} filled"] = "No" if is_blank else "Yes"
+            # Conservative intake mode: flag missing only when the box appears visually empty.
             if field in required_fields and is_blank:
                 issues.append(f"Missing {field}")
             # Only call illegible if there is writing but OCR is weak; do not make it automatically invalid.
@@ -215,18 +217,19 @@ def analyze_page(img: Image.Image, filename: str, page_num: int, required_fields
         rows.append(record)
     return rows, cv_to_pil(preview)
 
-st.title("Petition Validator V3")
-st.caption("Clean issue report: flags only specific missing fields and duplicate names/VUIDs by page and row.")
+st.title("Petition Intake Checker V4")
+st.caption("Conservative intake review: flags only fields that appear blank and clear duplicate entries. It avoids low-confidence OCR flags.")
 
 with st.sidebar:
     st.header("Form setup")
     st.write("This version is tuned for the Texas SOS local petition form shown in your project.")
     required = st.multiselect("Required fields", FIELDS, default=REQUIRED_DEFAULT)
     skip_header_lines = st.number_input("Header grid lines before signer rows", min_value=1, max_value=5, value=3, help="If it reads the column headings as rows, increase this. If it skips real signatures, decrease it.")
-    blank_threshold = st.slider("Blank field sensitivity", 0.001, 0.080, 0.010, 0.001, help="Lower = less likely to mark a written field blank. Raise only if blanks are being missed.")
-    flag_low_conf = st.checkbox("Flag illegible/low OCR confidence", value=False, help="Leave this OFF to prevent the app from flagging almost everything. Turn on only when you want handwriting-confidence review.")
-    low_conf = st.slider("Low OCR confidence review threshold", 0, 100, 15, help="Only used if the checkbox above is on.")
-    validate_dates = st.checkbox("Review date format", value=False, help="Leave this off unless OCR is reading dates well.")
+    blank_threshold = st.slider("Blank field sensitivity", 0.0005, 0.030, 0.0025, 0.0005, help="Conservative default: only flags a field when it looks almost completely empty. Increase only if true blanks are being missed.")
+    duplicate_conf = st.slider("Minimum OCR confidence for duplicate checks", 0, 100, 55, help="Higher = fewer false duplicate alerts. Duplicate checks only use text above this confidence.")
+    flag_low_conf = False
+    low_conf = 0
+    validate_dates = False
 
 uploaded_files = st.file_uploader("Upload completed petition PDFs or images", type=["pdf", "png", "jpg", "jpeg", "tif", "tiff"], accept_multiple_files=True)
 
@@ -253,8 +256,8 @@ if uploaded_files:
         df = pd.DataFrame(all_rows)
         # Duplicate checks after OCR
         if not df.empty:
-            df["Normalized Printed Name"] = df["Printed Name"].map(norm_key)
-            df["Normalized VUID"] = df["Voter ID / VUID"].map(norm_key)
+            df["Normalized Printed Name"] = df.apply(lambda r: norm_key(r.get("Printed Name", "")) if r.get("Printed Name confidence", 0) >= duplicate_conf and len(norm_key(r.get("Printed Name", ""))) >= 5 else "", axis=1)
+            df["Normalized VUID"] = df.apply(lambda r: norm_key(r.get("Voter ID / VUID", "")) if r.get("Voter ID / VUID confidence", 0) >= duplicate_conf and len(norm_key(r.get("Voter ID / VUID", ""))) >= 4 else "", axis=1)
 
             # Duplicate checks with exact page/row references, e.g. page 1 row 1 and page 2 row 1 duplicate name James Smith.
             for key_col, display_col, label in [
@@ -280,7 +283,7 @@ if uploaded_files:
         c1.metric("Rows checked", len(df))
         c2.metric("Flagged rows", int((df["Status"] == "Flagged").sum()) if not df.empty else 0)
         c3.metric("OK rows", int((df["Status"] == "OK").sum()) if not df.empty else 0)
-        clean_cols = ["Status", "Issue Summary", "File", "Page", "Line", "Date Signed", "Printed Name", "Residence Address", "County", "Voter ID / VUID", "Date of Birth"]
+        clean_cols = ["Status", "Issue Summary", "File", "Page", "Line", "Date Signed filled", "Printed Name filled", "Residence Address filled", "County filled", "Voter ID / VUID filled", "Date of Birth filled", "Printed Name", "Voter ID / VUID"]
         clean_df = df[[c for c in clean_cols if c in df.columns]].copy()
         st.dataframe(clean_df, use_container_width=True)
 
@@ -302,4 +305,4 @@ if uploaded_files:
 else:
     st.info("Upload a petition PDF or image to start.")
 
-st.warning("Prototype notice: this tool flags entries for human review. It should not be used to automatically reject voter signatures.")
+st.warning("Prototype notice: this is an intake review tool. It checks whether boxes appear filled and looks for obvious duplicates; staff still make final decisions.")

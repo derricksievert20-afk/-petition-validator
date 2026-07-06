@@ -1,14 +1,11 @@
-# Petition Validator V3
+# Petition Intake Checker V4
 
-This version focuses on a clean reviewer report instead of dumping raw OCR confidence.
+Conservative Streamlit prototype for petition intake review.
 
-It flags:
-- Page/row-specific missing required fields
-- Duplicate printed names with page/row locations
-- Duplicate VUIDs with page/row locations
+This version is intentionally less aggressive:
+- Flags a required field only when the box appears visually blank
+- Does not flag low OCR confidence by default
+- Does not flag date format issues by default
+- Checks duplicate names/VUIDs only when OCR text confidence is high enough
 
-Low OCR/illegible handwriting flags are off by default to reduce false positives.
-
-Deploy on Streamlit with:
-- Branch: `main`
-- Main file path: `app.py`
+Deploy with Streamlit Cloud using `app.py`.
