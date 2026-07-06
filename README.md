@@ -1,12 +1,11 @@
-# Petition Intake Review V8
+# Petition Intake Checker V4
 
-This version is intentionally human-in-the-loop. It does not rely on unreliable handwriting OCR for legal verification.
+Conservative Streamlit prototype for petition intake review.
 
-Workflow:
-1. Upload petition PDFs/images.
-2. Review each row crop.
-3. Uncheck fields that are visibly blank.
-4. Type printed name and VUID when readable.
-5. Generate a clean report of missing fields and possible duplicate names/VUIDs.
+This version is intentionally less aggressive:
+- Flags a required field only when the box appears visually blank
+- Does not flag low OCR confidence by default
+- Does not flag date format issues by default
+- Checks duplicate names/VUIDs only when OCR text confidence is high enough
 
-Deploy on Streamlit with main file path: `app.py`.
+Deploy with Streamlit Cloud using `app.py`.
