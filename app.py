@@ -15,7 +15,7 @@ try:
 except Exception:
     convert_from_bytes = None
 
-st.set_page_config(page_title="Petition Intake Checker V4", layout="wide")
+st.set_page_config(page_title="Petition Intake Checker V5", layout="wide")
 
 @dataclass
 class CellResult:
@@ -28,7 +28,7 @@ REQUIRED_DEFAULT = ["Printed Name", "Residence Address", "County", "Voter ID / V
 
 # Approximate Texas SOS petition signature table columns as fractions across the detected table width.
 # These are deliberately conservative and can be adjusted in the sidebar.
-COLUMN_FRACTIONS = [0.000, 0.095, 0.235, 0.470, 0.705, 0.790, 0.895, 1.000]
+COLUMN_FRACTIONS = [0.000, 0.075, 0.190, 0.345, 0.695, 0.780, 0.900, 1.000]
 
 def pil_to_cv(img: Image.Image) -> np.ndarray:
     arr = np.array(img.convert("RGB"))
@@ -85,49 +85,24 @@ def find_table_bbox(img: np.ndarray) -> Tuple[int, int, int, int]:
     return int(0.035*w), int(0.32*h), int(0.965*w), int(0.74*h)
 
 def find_row_bounds(table_img: np.ndarray, expected_rows: int = 10, skip_header_lines: int = 3) -> List[Tuple[int,int]]:
-    gray = cv2.cvtColor(table_img, cv2.COLOR_BGR2GRAY)
-    h, w = gray.shape
-    th = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 31, 10)
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (max(40, w//10), 1))
-    horiz = cv2.morphologyEx(th, cv2.MORPH_OPEN, kernel)
-    projection = horiz.sum(axis=1)
-    ys = np.where(projection > projection.max() * 0.35)[0] if projection.max() > 0 else np.array([])
+    """Use the known Texas SOS petition layout.
 
-    lines = []
-    if len(ys):
-        start = ys[0]
-        prev = ys[0]
-        for y in ys[1:]:
-            if y - prev > 4:
-                lines.append((start + prev)//2)
-                start = y
-            prev = y
-        lines.append((start + prev)//2)
-    lines = sorted(set([int(y) for y in lines]))
-
-    # Need enough line boundaries. Use bottom 11 intervals after headers.
-    if len(lines) >= expected_rows + skip_header_lines + 1:
-        start_idx = skip_header_lines
-        bounds = []
-        for i in range(start_idx, min(start_idx + expected_rows, len(lines)-1)):
-            y1, y2 = lines[i], lines[i+1]
-            if y2 - y1 > 8:
-                bounds.append((y1+2, y2-2))
-        if len(bounds) >= 6:
-            return bounds[:expected_rows]
-
-    # Fallback: lower data area of table after header rows.
-    top = int(0.30*h)
-    bottom = int(0.92*h)
-    row_h = (bottom - top) / expected_rows
-    return [(int(top+i*row_h), int(top+(i+1)*row_h)) for i in range(expected_rows)]
+    Generic horizontal-line detection was over-sensitive and caused false flags.
+    This version assumes the standard form: column headings at top, 10 signer rows
+    below. The sidebar allows small adjustments if a scan is cropped differently.
+    """
+    h, w = table_img.shape[:2]
+    data_top = int((0.28 + 0.015 * (skip_header_lines - 3)) * h)
+    data_bottom = int(0.88 * h)
+    row_h = (data_bottom - data_top) / expected_rows
+    return [(int(data_top+i*row_h)+2, int(data_top+(i+1)*row_h)-2) for i in range(expected_rows)]
 
 def crop_cell(row_img: np.ndarray, field_idx: int, left_margin_pct=0.0, right_margin_pct=0.0) -> np.ndarray:
     h, w = row_img.shape[:2]
     x1 = int(COLUMN_FRACTIONS[field_idx] * w)
     x2 = int(COLUMN_FRACTIONS[field_idx+1] * w)
-    pad_x = 3
-    pad_y = max(1, int(0.08*h))
+    pad_x = 2
+    pad_y = max(1, int(0.04*h))
     return row_img[pad_y:max(pad_y+1, h-pad_y), max(0,x1+pad_x):min(w,x2-pad_x)]
 
 def ink_ratio(cell: np.ndarray) -> float:
@@ -217,15 +192,15 @@ def analyze_page(img: Image.Image, filename: str, page_num: int, required_fields
         rows.append(record)
     return rows, cv_to_pil(preview)
 
-st.title("Petition Intake Checker V4")
-st.caption("Conservative intake review: flags only fields that appear blank and clear duplicate entries. It avoids low-confidence OCR flags.")
+st.title("Petition Intake Checker V5")
+st.caption("Intake review focused on filled/missing fields and possible duplicates. This version uses the Texas petition layout instead of generic OCR rows.")
 
 with st.sidebar:
     st.header("Form setup")
     st.write("This version is tuned for the Texas SOS local petition form shown in your project.")
     required = st.multiselect("Required fields", FIELDS, default=REQUIRED_DEFAULT)
-    skip_header_lines = st.number_input("Header grid lines before signer rows", min_value=1, max_value=5, value=3, help="If it reads the column headings as rows, increase this. If it skips real signatures, decrease it.")
-    blank_threshold = st.slider("Blank field sensitivity", 0.0005, 0.030, 0.0025, 0.0005, help="Conservative default: only flags a field when it looks almost completely empty. Increase only if true blanks are being missed.")
+    skip_header_lines = st.number_input("Row start adjustment", min_value=1, max_value=5, value=3, help="Use 3 normally. Increase/decrease only if the orange row boxes are shifted.")
+    blank_threshold = st.slider("Blank field sensitivity", 0.0002, 0.020, 0.0010, 0.0002, help="Lower = fewer false missing-field flags. Increase only if truly blank boxes are not being caught.")
     duplicate_conf = st.slider("Minimum OCR confidence for duplicate checks", 0, 100, 55, help="Higher = fewer false duplicate alerts. Duplicate checks only use text above this confidence.")
     flag_low_conf = False
     low_conf = 0

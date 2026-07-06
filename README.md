@@ -1,11 +1,10 @@
-# Petition Intake Checker V4
+# Petition Intake Checker V5
 
-Conservative Streamlit prototype for petition intake review.
+This version is tuned for the Texas SOS petition sheet layout. It is designed for intake review, not legal verification.
 
-This version is intentionally less aggressive:
-- Flags a required field only when the box appears visually blank
-- Does not flag low OCR confidence by default
-- Does not flag date format issues by default
-- Checks duplicate names/VUIDs only when OCR text confidence is high enough
+Main goal:
+- flag fields that visually appear blank
+- flag possible duplicate printed names or VUIDs
+- reduce false flags from weak handwriting OCR
 
-Deploy with Streamlit Cloud using `app.py`.
+Deploy with Streamlit using `app.py`.
