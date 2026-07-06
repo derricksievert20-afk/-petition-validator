@@ -1,10 +1,10 @@
-# Petition Intake Checker V5
+# Petition Intake Review V6
 
-This version is tuned for the Texas SOS petition sheet layout. It is designed for intake review, not legal verification.
+This version is designed for intake review, not voter verification.
 
-Main goal:
-- flag fields that visually appear blank
-- flag possible duplicate printed names or VUIDs
-- reduce false flags from weak handwriting OCR
+It focuses on:
+- whether required boxes appear filled
+- editable name/VUID fields for duplicate checking
+- clean reports like: Page 1, Row 5 — Missing Address
 
-Deploy with Streamlit using `app.py`.
+Because handwriting OCR is not reliable enough by itself, this version lets staff quickly correct the extracted names/VUIDs before duplicate reports are generated.
