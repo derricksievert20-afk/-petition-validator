@@ -1,8 +1,6 @@
 streamlit
 pandas
-numpy
-opencv-python-headless
 pillow
-pytesseract
-pdf2image
+pymupdf
 openpyxl
+rapidfuzz

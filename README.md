@@ -1,10 +1,14 @@
-# Petition Intake Review V6
+# Petition Intake Review V7
 
-This version is designed for intake review, not voter verification.
+This version is intentionally human-in-the-loop. It does not pretend that generic OCR can reliably read handwritten petitions.
 
-It focuses on:
-- whether required boxes appear filled
-- editable name/VUID fields for duplicate checking
-- clean reports like: Page 1, Row 5 — Missing Address
+It helps staff reduce manual line-by-line review by:
+- showing petition pages and row/field crops,
+- letting the reviewer mark required fields as filled or missing,
+- letting the reviewer type/correct printed name and VUID,
+- flagging possible duplicate printed names and duplicate VUIDs after review,
+- exporting a clean CSV/Excel report.
 
-Because handwriting OCR is not reliable enough by itself, this version lets staff quickly correct the extracted names/VUIDs before duplicate reports are generated.
+Deploy on Streamlit Cloud with:
+- Branch: main
+- Main file: app.py
