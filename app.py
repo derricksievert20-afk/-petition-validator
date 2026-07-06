@@ -15,7 +15,7 @@ try:
 except Exception:
     convert_from_bytes = None
 
-st.set_page_config(page_title="Petition AI Validator V2", layout="wide")
+st.set_page_config(page_title="Petition Validator V3", layout="wide")
 
 @dataclass
 class CellResult:
@@ -161,7 +161,14 @@ def clean_text(s: str) -> str:
 def norm_key(s: str) -> str:
     return re.sub(r"[^A-Z0-9]", "", (s or "").upper())
 
-def analyze_page(img: Image.Image, filename: str, page_num: int, required_fields: List[str], low_conf_threshold: int, blank_threshold: float, skip_header_lines: int, validate_dates: bool) -> Tuple[List[Dict], Image.Image]:
+def human_location(row) -> str:
+    return f"page {int(row['Page'])}, row {int(row['Line'])}"
+
+def make_clean_issue_summary(row) -> str:
+    issues = row.get("Issues", "") or ""
+    return issues if issues else "OK"
+
+def analyze_page(img: Image.Image, filename: str, page_num: int, required_fields: List[str], low_conf_threshold: int, blank_threshold: float, skip_header_lines: int, validate_dates: bool, flag_low_conf: bool) -> Tuple[List[Dict], Image.Image]:
     cvimg = normalize_page(pil_to_cv(img))
     x1,y1,x2,y2 = find_table_bbox(cvimg)
     table = cvimg[y1:y2, x1:x2]
@@ -194,8 +201,8 @@ def analyze_page(img: Image.Image, filename: str, page_num: int, required_fields
             if (not is_blank) and field in ["Printed Name", "Residence Address", "County", "Voter ID / VUID", "Date of Birth"] and res.confidence < low_conf_threshold:
                 low_conf_fields.append(field)
 
-        if low_conf_fields:
-            issues.append("Human review: low OCR confidence in " + ", ".join(low_conf_fields))
+        if flag_low_conf and low_conf_fields:
+            issues.append("Needs human review: possible illegible " + ", ".join(low_conf_fields))
 
         if validate_dates:
             for df in ["Date Signed", "Date of Birth"]:
@@ -208,8 +215,8 @@ def analyze_page(img: Image.Image, filename: str, page_num: int, required_fields
         rows.append(record)
     return rows, cv_to_pil(preview)
 
-st.title("Petition AI Validator V2")
-st.caption("Template-aware prototype for the Texas local political subdivision petition form. It reviews only the signature table and flags items for human review.")
+st.title("Petition Validator V3")
+st.caption("Clean issue report: flags only specific missing fields and duplicate names/VUIDs by page and row.")
 
 with st.sidebar:
     st.header("Form setup")
@@ -217,8 +224,9 @@ with st.sidebar:
     required = st.multiselect("Required fields", FIELDS, default=REQUIRED_DEFAULT)
     skip_header_lines = st.number_input("Header grid lines before signer rows", min_value=1, max_value=5, value=3, help="If it reads the column headings as rows, increase this. If it skips real signatures, decrease it.")
     blank_threshold = st.slider("Blank field sensitivity", 0.001, 0.080, 0.010, 0.001, help="Lower = less likely to mark a written field blank. Raise only if blanks are being missed.")
-    low_conf = st.slider("Low OCR confidence review threshold", 0, 100, 25, help="Lower this to reduce false illegible flags. Handwriting OCR is imperfect.")
-    validate_dates = st.checkbox("Review date format", value=False, help="Turn this on only after OCR quality is good enough. Default is off to avoid false flags.")
+    flag_low_conf = st.checkbox("Flag illegible/low OCR confidence", value=False, help="Leave this OFF to prevent the app from flagging almost everything. Turn on only when you want handwriting-confidence review.")
+    low_conf = st.slider("Low OCR confidence review threshold", 0, 100, 15, help="Only used if the checkbox above is on.")
+    validate_dates = st.checkbox("Review date format", value=False, help="Leave this off unless OCR is reading dates well.")
 
 uploaded_files = st.file_uploader("Upload completed petition PDFs or images", type=["pdf", "png", "jpg", "jpeg", "tif", "tiff"], accept_multiple_files=True)
 
@@ -236,7 +244,7 @@ if uploaded_files:
         done = 0
         for fname, pages in pages_by_file:
             for pi, page in enumerate(pages, start=1):
-                rows, preview = analyze_page(page, fname, pi, required, low_conf, blank_threshold, int(skip_header_lines), validate_dates)
+                rows, preview = analyze_page(page, fname, pi, required, low_conf, blank_threshold, int(skip_header_lines), validate_dates, flag_low_conf)
                 all_rows.extend(rows)
                 previews.append((fname, pi, preview))
                 done += 1
@@ -247,24 +255,43 @@ if uploaded_files:
         if not df.empty:
             df["Normalized Printed Name"] = df["Printed Name"].map(norm_key)
             df["Normalized VUID"] = df["Voter ID / VUID"].map(norm_key)
-            dup_name = df["Normalized Printed Name"].ne("") & df.duplicated("Normalized Printed Name", keep=False)
-            dup_vuid = df["Normalized VUID"].ne("") & df.duplicated("Normalized VUID", keep=False)
-            for mask, msg in [(dup_name, "Duplicate printed name"), (dup_vuid, "Duplicate VUID")]:
-                df.loc[mask, "Issues"] = df.loc[mask, "Issues"].apply(lambda x: (x + "; " if x else "") + msg)
+
+            # Duplicate checks with exact page/row references, e.g. page 1 row 1 and page 2 row 1 duplicate name James Smith.
+            for key_col, display_col, label in [
+                ("Normalized Printed Name", "Printed Name", "Duplicate name"),
+                ("Normalized VUID", "Voter ID / VUID", "Duplicate VUID"),
+            ]:
+                groups = df[df[key_col].ne("")].groupby(key_col).groups
+                for _, idxs in groups.items():
+                    idxs = list(idxs)
+                    if len(idxs) > 1:
+                        shown_value = clean_text(str(df.loc[idxs[0], display_col]))
+                        locs = [human_location(df.loc[i]) for i in idxs]
+                        msg = f"{label}: {shown_value} appears on " + " and ".join(locs)
+                        for i in idxs:
+                            current = df.loc[i, "Issues"] or ""
+                            df.loc[i, "Issues"] = (current + "; " if current else "") + msg
+
             df["Status"] = np.where(df["Issues"].fillna("").ne(""), "Flagged", "OK")
+            df["Issue Summary"] = df.apply(make_clean_issue_summary, axis=1)
 
         st.subheader("Review results")
         c1,c2,c3 = st.columns(3)
         c1.metric("Rows checked", len(df))
         c2.metric("Flagged rows", int((df["Status"] == "Flagged").sum()) if not df.empty else 0)
         c3.metric("OK rows", int((df["Status"] == "OK").sum()) if not df.empty else 0)
-        st.dataframe(df, use_container_width=True)
+        clean_cols = ["Status", "Issue Summary", "File", "Page", "Line", "Date Signed", "Printed Name", "Residence Address", "County", "Voter ID / VUID", "Date of Birth"]
+        clean_df = df[[c for c in clean_cols if c in df.columns]].copy()
+        st.dataframe(clean_df, use_container_width=True)
 
-        csv = df.to_csv(index=False).encode("utf-8")
+        with st.expander("Show raw OCR details"):
+            st.dataframe(df, use_container_width=True)
+
+        csv = clean_df.to_csv(index=False).encode("utf-8")
         st.download_button("Download CSV report", data=csv, file_name="petition_validation_report.csv", mime="text/csv")
         xbuf = io.BytesIO()
         with pd.ExcelWriter(xbuf, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False, sheet_name="Validation Report")
+            clean_df.to_excel(writer, index=False, sheet_name="Validation Report")
         st.download_button("Download Excel report", data=xbuf.getvalue(), file_name="petition_validation_report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
         st.subheader("Detected signature rows")
