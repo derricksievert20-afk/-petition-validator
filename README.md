@@ -1,31 +1,32 @@
-# Petition AI Validator
+# Petition AI Validator V2
 
-This is a Streamlit web app that accepts completed petition PDFs/images, OCRs the signature rows, and flags:
+Template-aware Streamlit prototype for the Texas local political subdivision petition form.
 
-- Missing required fields
-- Duplicate printed names
-- Duplicate voter IDs
-- Low-confidence / likely illegible handwriting
-- Date format issues
+## What changed in V2
 
-## Best use
-This works best with flat, scanned pages. Phone pictures should be taken straight-on with good lighting.
+- Looks for the signature table instead of OCRing the whole page.
+- Ignores the title/instruction/affidavit sections.
+- Splits the signature table into 10 signer rows.
+- Uses ink density to detect blank fields, which reduces false missing-field flags.
+- Uses OCR confidence only as a human-review signal.
+- Checks duplicate printed names and duplicate VUIDs across all uploaded pages.
+- Exports CSV and Excel reports.
+- Shows a preview with the detected table/rows.
 
-## Deploy as a shareable website
-1. Create a GitHub repo.
-2. Upload all files in this folder.
-3. Go to Streamlit Community Cloud.
-4. Deploy `app.py`.
+## Deploy on Streamlit Cloud
 
-The included `packages.txt` installs Tesseract on Streamlit Cloud.
+Upload these files to your GitHub repository:
 
-## Run locally
-Install Tesseract OCR first, then run:
+- `app.py`
+- `requirements.txt`
+- `packages.txt`
+- `README.md`
 
-```bash
-pip install -r requirements.txt
-streamlit run app.py
-```
+Then deploy with:
 
-## Important note
-This is a prototype. It should flag entries for human review, not automatically reject signatures.
+- Branch: `main`
+- Main file path: `app.py`
+
+## Important
+
+This is still a prototype. Generic OCR will not read all handwriting correctly. A production version should integrate Google Vision, Azure Document Intelligence, or another handwriting OCR service.

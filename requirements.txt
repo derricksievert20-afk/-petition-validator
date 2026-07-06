@@ -1,9 +1,8 @@
-streamlit>=1.36
-pandas>=2.0
-Pillow>=10.0
-opencv-python-headless>=4.9
-pytesseract>=0.3.10
-rapidfuzz>=3.6
-pypdfium2>=4.30
-openpyxl>=3.1
-numpy>=1.26
+streamlit
+pandas
+numpy
+opencv-python-headless
+pillow
+pytesseract
+pdf2image
+openpyxl
